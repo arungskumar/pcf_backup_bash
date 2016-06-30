@@ -1,5 +1,5 @@
 ## Backup a PCF deployment w/out cfops
-### `pcf_backup.sh`
+### [`pcf_backup.sh`](https://github.com/virtmerlin/pcf_backup_bash/blob/master/backup_pcf.sh)
 
 
 Documentation on manual backup of PCF can be found [here](https://docs.pivotal.io/pivotalcf/1-7/customizing/backup-restore/backup-pcf.html).  This tool is intended to assist with automating the process.
