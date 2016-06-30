@@ -111,7 +111,7 @@ function fn_ert {
     fi
 
     sudo mount -o ro,tcp $NFS_IP:/var/vcap/store /tmp/blobstore || sudo mount -o remount,ro,tcp $NFS_IP:/var/vcap/store /tmp/blobstore
-    tar -cvzf $BACKUP_DIR_PATH/blobstore.tgz /tmp/bloblstore/shared/* -C /tmp/blobstore .
+    tar -cvzf $BACKUP_DIR_PATH/blobstore.tgz /tmp/blobstore/shared/* -C /tmp/blobstore . || echo "Review tarball as tar has reported errs..."
 
     #Start All Cloud Controllers
     for y in ${CLOUD_CTRLR_INSTANCES[@]}; do
