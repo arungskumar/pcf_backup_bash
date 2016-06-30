@@ -9,7 +9,7 @@ Documentation on manual backup of PCF can be found [here](https://docs.pivotal.i
 - Will Stop Cloud Controllers, backup all databases in ERT mysql instance, and restart cloud controllers
 - Will Backup Mysql Tile
 - Will Backup RabbitMQ Tile
-- Only needs Bosh IP & C=credentials as input,  detects other params from reading manifests
+- Only needs Bosh IP & credentials as input,  detects other params from reading manifests
 - Easily scheduled to run via cron on a dedicated Linux backup VM
 
 
