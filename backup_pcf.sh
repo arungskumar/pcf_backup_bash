@@ -176,6 +176,9 @@ function fn_rabbitmq {
         if [ $Q_MSG_COUNT -gt 0 ]; then
           echo "Will backup $Q_NAME on $Q_VHOST ..."
           mkdir -p $BACKUP_DIR_PATH/rabbitqs/$Q_VHOST/$Q_NAME
+          if [[ $Q_VHOST != '/' ]]; then
+            Q_VHOST='/'$Q_VHOST
+          fi
           echo $BACKUP_DIR_PATH/rabbitmq-dump-queue -uri="amqp://$TILE_RABBITMQ_SERVER_ADMIN:$TILE_RABBITMQ_SERVER_PASSWORD@$TILE_RABBITMQ_PROXY_IP$Q_VHOST" \
           -queue=$Q_NAME -max-messages=10000 -output-dir=$BACKUP_DIR_PATH/rabbitqs/$Q_VHOST/$Q_NAME
           $BACKUP_DIR_PATH/rabbitmq-dump-queue -uri="amqp://$TILE_RABBITMQ_SERVER_ADMIN:$TILE_RABBITMQ_SERVER_PASSWORD@$TILE_RABBITMQ_PROXY_IP$Q_VHOST" \
@@ -212,4 +215,8 @@ for (( i=0; i<=${#DEPLOYMENTS[@]}-1; i++ )); do
 done
 
 #### Wipe Older BACKUP Folders in given Backup Dir
-find $BACKUP_DIR/* -type d -ctime +$BACKUP_KEEP_DAYS -exec rm -rf {} \;
+find $BACKUP_DIR/* -type d -ctime +$BACKUP_KEEP_DAYS -exec rm -rf {} \; || true
+
+echo "=================================================="
+echo "=Backups Completed and staged to $BACKUP_DIR_PATH="
+echo "=================================================="
