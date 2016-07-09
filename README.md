@@ -8,7 +8,8 @@ Documentation on manual backup of PCF can be found [here](https://docs.pivotal.i
 
 - Will Stop Cloud Controllers, backup all databases in ERT mysql instance, and restart cloud controllers
 - Will Backup Mysql Tile
-- Will Backup RabbitMQ Tile
+- Will Backup RabbitMQ Tile (Config & any Active Q data)
+- Will Backup Redis (Dedicated Nodes Only && Requires Rsync on the backup node)
 - Only needs Bosh IP & credentials as input,  detects other params from reading manifests
 - Easily scheduled to run via cron on a dedicated Linux backup VM
 
@@ -19,7 +20,7 @@ Common Linux cli tools such as : `awk, mysqldump, rabbitmqadmin, bosh-cli, rabbi
 
 Most can be installed easily:
 
-- `sudo apt-get install ruby mysql-server python-pip nfs-common`
+- `sudo apt-get install ruby mysql-server python-pip nfs-common rsync`
 - `sudo gem install bosh_cli --no-ri --no-rdoc`
 - `sudo pip install shyaml`
 - `wget https://github.com/virtmerlin/rabbitmq-dump-queue/raw/master/release/rabbitmq-dump-queue-1.1-linux-amd64/rabbitmq-dump-queue`
@@ -30,9 +31,11 @@ Most can be installed easily:
 
 Tested w: Ubuntu Trusty Dedicated Backup VM & PCF 1.7.x on Azure
 ##### Example Usage:
-   pcf_backup.sh [backupdir] [days to keep] [BOSH IP] [BOSH ADMIN]  [BOSH PASSWD]
+   pcf_backup.sh [backupdir] [days to keep] [BOSH IP] [BOSH ADMIN]  [BOSH PASSWD] [DD API KEY]
    
-   `pcf_backup.sh "/pcf_backup"  "2"  "192.168.120.10"  admin 'bl4h!'`
+   `pcf_backup.sh "/pcf_backup"  "2"  "192.168.120.10"  admin 'bl4h!' "deff5701541e366c2b0547a11c64ca01"`
+   
+   DataDog Key is optional,  simply not passing the arg will prevent attempts to report stats
    
 ####Useful Backup Links
 
@@ -41,3 +44,4 @@ Tested w: Ubuntu Trusty Dedicated Backup VM & PCF 1.7.x on Azure
 - [Backing Up Rabbit Config](https://www.rabbitmq.com/management-cli.html)
 - [Backing Up Rabbit Messages w/ QDB](http://qdb.io/)
 - [Backing Up Rabbit Messages w/ raw cli in BASH](https://github.com/virtmerlin/rabbitmq-dump-queue)
+- [Backing Up Redis](http://redis.io/topics/persistence)
