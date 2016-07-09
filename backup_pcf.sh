@@ -3,8 +3,8 @@
 # Author: mglynn@pivotal.io
 # Tested w: Ubuntu Trusty Backup VM & PCF 1.7 on Azure
 # Example Usage:
-#   pcf_backup.sh   [backupdir] [days to keep]     [BOSH IP]      [BOSH ADMIN]     [BOSH PASSWD]
-#   pcf_backup.sh "/pcf_backup"       "2"      "192.168.120.10"       admin         'bl4h!'
+#   pcf_backup.sh   [backupdir] [days to keep]     [BOSH IP]      [BOSH ADMIN]     [BOSH PASSWD]        [DD API Key]
+#   pcf_backup.sh "/pcf_backup"       "2"      "192.168.120.10"       admin         'bl4h!'    "deff5701541e366c2b0547a11c64ca01"
 ############################################################################################
 # requires awk, mysqldump, rabbitmqadmin, bosh-cli, azure-cli, rabbitmq-dump-queue, rsync  #
 ############################################################################################
@@ -24,6 +24,7 @@ BACKUP_KEEP_DAYS=$2
 BOSH_TARGET=$3
 BOSH_ADMIN=$4
 BOSH_PASSWORD=$5
+DD_API_KEY=$6
 #Configuration Vars - partial names of jobs in manifest OK
 BOSH_ERT_MYSQL_PARTITION_NAME="mysql-partition"
 BOSH_ERT_MYSQL_PROXY_PARTITION_NAME="mysql_proxy-partition"
@@ -51,8 +52,26 @@ declare -a BLOBS=(
 ##############################
 
 function error_exit {
-   echo "backup_pcf: ${1:-"Error"}" >>$LOGFILE 2>&1
+   echo "backup_pcf: ${1:-"Unknown Error"}" >>$LOGFILE 2>&1
+   if [ ! -z $DD_API_KEY ]; then
+       currenttime=$(date +%s)
+       fn_put_datadog "bashtool.pcfbackup.status" $currenttime 0
+       fn_put_datadog "bashtool.pcfbackup.duration" $currenttime 0
+       fn_put_datadog "bashtool.pcfbackup.size" $currenttime 0
+   fi
    exit 1
+}
+
+function fn_put_datadog {
+
+  curl -X POST -H "Content-type: application/json" \
+  -d "{ \"series\" :
+           [{\"metric\":\"$1\",
+            \"points\":[[$2, $3]],
+            \"type\":\"gauge\"}]
+      }" \
+  "https://app.datadoghq.com/api/v1/series?api_key=$DD_API_KEY" >>$LOGFILE 2>&1
+
 }
 
 function fn_get_job_index {
@@ -221,7 +240,7 @@ function fn_redis {
     sudo /etc/init.d/rsync stop || error_exit "fn_redis - Error Stopping rsync deamon"
 
     rm -rf /tmp/$1.yml || error_exit "fn_redis - Error removing tmp manifest"
-    
+
 }
 ##############################
 # End of Functions           #
@@ -289,3 +308,13 @@ echo "==================================================" >>$LOGFILE 2>&1
 echo "Backups Completed and staged to $BACKUP_DIR_PATH" >>$LOGFILE 2>&1
 echo "Backed up $SIZE MB in $RUNTIME Minutes" >>$LOGFILE 2>&1
 echo "==================================================" >>$LOGFILE 2>&1
+
+if [ ! -z $DD_API_KEY ]; then
+    echo "Sending Backup Stats to Datadog ... " >>$LOGFILE 2>&1
+    currenttime=$(date +%s)
+    fn_put_datadog "bashtool.pcfbackup.status" $currenttime 1
+    fn_put_datadog "bashtool.pcfbackup.duration" $currenttime $RUNTIME
+    fn_put_datadog "bashtool.pcfbackup.size" $currenttime $SIZE
+fi
+
+exit 0
