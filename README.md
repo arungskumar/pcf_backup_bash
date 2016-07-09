@@ -10,6 +10,7 @@ Documentation on manual backup of PCF can be found [here](https://docs.pivotal.i
 - Will Backup Mysql Tile
 - Will Backup RabbitMQ Tile (Config & any Active Q data)
 - Will Backup Redis (Dedicated Nodes Only && Requires Rsync on the backup node)
+- Will report success/fail, duration, and size to Datadog (Optional)
 - Only needs Bosh IP & credentials as input,  detects other params from reading manifests
 - Easily scheduled to run via cron on a dedicated Linux backup VM
 
