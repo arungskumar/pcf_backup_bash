@@ -5,12 +5,14 @@
 # Example Usage:
 #   pcf_backup.sh   [backupdir] [days to keep]     [BOSH IP]      [BOSH ADMIN]     [BOSH PASSWD]
 #   pcf_backup.sh "/pcf_backup"       "2"      "192.168.120.10"       admin         'bl4h!'
-###############################################################
-# requires awk, mysqldump, rabbitmqadmin, bosh-cli, azure-cli, rabbitmq-dump-queue
-###############################################################
-# sudo apt-get install ruby mysql-server python-pip nfs-common
+############################################################################################
+# requires awk, mysqldump, rabbitmqadmin, bosh-cli, azure-cli, rabbitmq-dump-queue, rsync  #
+############################################################################################
+# sudo apt-get install ruby mysql-server python-pip nfs-common rsync
 # sudo gem install bosh_cli --no-ri --no-rdoc
 # sudo pip install shyaml
+# * Enable remote access in /etc/default/rsync && /etc/rsyncd.conf && /etc/rsyncd.secrets -- used for redis backup function
+# * Setup backup user as a sudoer with ALL=NOPASSWD: ALL --visudo
 
 ##############################
 # Config                     #
@@ -35,7 +37,7 @@ declare -a DEPLOYMENTS=(
 "cf-azure:ert"
 "p-mysql:mysql"
 "p-rabbitmq:rabbitmq"
-#"p-redis:redis"
+"p-redis:redis"
 )
 declare -a BLOBS=(
 "cc-buildpacks"
@@ -78,7 +80,9 @@ function fn_get_job_ip {
 
 function fn_ert {
     #Read in ert manifest
+    echo "##########################" >>$LOGFILE 2>&1
     echo "Processing ERT Manifest "$1"..." >>$LOGFILE 2>&1
+    echo "##########################" >>$LOGFILE 2>&1
     MYSQL_PROXY_INDEX=$( fn_get_job_index $1 $BOSH_ERT_MYSQL_PROXY_PARTITION_NAME ) || error_exit "fn_ert"
     MYSQL_PROXY_IP=$( fn_get_job_ip $1 $MYSQL_PROXY_INDEX ) || error_exit "fn_ert"
     MYSQL_INDEX=$( fn_get_job_index $1 $BOSH_ERT_MYSQL_PARTITION_NAME ) || error_exit "fn_ert"
@@ -127,7 +131,9 @@ function fn_ert {
 
 function fn_mysql {
     #Read in mysql manifest
+    echo "##########################" >>$LOGFILE 2>&1
     echo "Processing MYSQL Manifest "$1"..." >>$LOGFILE 2>&1
+    echo "##########################" >>$LOGFILE 2>&1
     TILE_MYSQL_PROXY_INDEX=$( fn_get_job_index $1 $BOSH_MYSQL_PROXY_PARTITION_NAME )
     TILE_MYSQL_PROXY_IP=$( fn_get_job_ip $1 $TILE_MYSQL_PROXY_INDEX )
     TILE_MYSQL_INDEX=$( fn_get_job_index $1 $BOSH_MYSQL_PARTITION_NAME )
@@ -142,7 +148,9 @@ function fn_mysql {
 
 function fn_rabbitmq {
     #Read in rabbitmq manifest
+    echo "##########################" >>$LOGFILE 2>&1
     echo "Processing RABBITMQ Manifest "$1"..." >>$LOGFILE 2>&1
+    echo "##########################" >>$LOGFILE 2>&1
     TILE_RABBITMQ_PROXY_INDEX=$( fn_get_job_index $1 $BOSH_RABBITMQ_PROXY_PARTITION_NAME )
     TILE_RABBITMQ_PROXY_IP=$( fn_get_job_ip $1 $TILE_RABBITMQ_PROXY_INDEX )
     TILE_RABBITMQ_SERVER_INDEX=$( fn_get_job_index $1 $BOSH_RABBITMQ_SERVER_PARTITION_NAME )
@@ -189,16 +197,41 @@ function fn_rabbitmq {
       rm -rf /tmp/$1.yml || error_exit "fn_rabbitmq - Error removing tmp manifest"
 }
 
+function fn_redis {
+    #Read in redis manifest
+    echo "##########################" >>$LOGFILE 2>&1
+    echo "Processing REDIS Manifest "$1"..." >>$LOGFILE 2>&1
+    echo "##########################" >>$LOGFILE 2>&1
+    echo "Starting rsync ..." >>$LOGFILE 2>&1
+    sudo /etc/init.d/rsync start || error_exit "fn_redis - Error Starting rsync deamon"
+
+    REDIS_DEDICATED_NODES=$(bosh vms $1 | grep dedicated | awk -F "|" '{print$2}' | awk '{print$1}' | tr "/" ":")
+
+    for rnode in $REDIS_DEDICATED_NODES; do
+      RNODE_ID=$(echo $rnode | awk -F ":" '{print$1}')
+      RNODE_INDEX=$(echo $rnode | awk -F ":" '{print$2}')
+      MYIP=$(sudo ifconfig eth0 | grep "inet addr" | awk '{print$2}' | tr -d "addr:")
+
+      mkdir -p $BACKUP_DIR_PATH/redis/$RNODE_ID-$RNODE_INDEX
+      BOSHCMD="bosh ssh $RNODE_ID $RNODE_INDEX 'export RSYNC_PASSWORD=\"pcfbackup\" && rsync -rltS /var/vcap/store/redis/* pcfbackup@$MYIP::pcfbackup/$BACKUP_DIR_DATETIME/redis/$RNODE_ID-$RNODE_INDEX/'"
+      eval $BOSHCMD >>$LOGFILE 2>&1  || error_exit "fn_redis - Error Backing up $rnode"
+    done
+
+    echo "Stopping rsync ..." >>$LOGFILE 2>&1
+    sudo /etc/init.d/rsync stop || error_exit "fn_redis - Error Stopping rsync deamon"
+
+    rm -rf /tmp/$1.yml || error_exit "fn_redis - Error removing tmp manifest"
+    
+}
 ##############################
 # End of Functions           #
 ##############################
 
 #### Verify Backup Dir Exists
+
 if [ ! -d $BACKUP_DIR ]; then
         mkdir -p $BACKUP_DIR || error_exit "pcf_backup - Error creating $BACKUP_DIR "
 fi
-
-
 
 #### Creating Backup Sub-Folder with Timestamp name
 
@@ -216,6 +249,7 @@ bosh -n target https://$BOSH_TARGET >>$LOGFILE 2>&1 || error_exit "pcf_backup - 
 bosh -n login $BOSH_ADMIN $BOSH_PASSWORD >>$LOGFILE 2>&1 || error_exit "pcf_backup - Error logging into $BOSH_TARGET "
 
 ####Backup Deployments Main Logic
+
 STARTTIME=$(date +%s)
 for (( i=0; i<=${#DEPLOYMENTS[@]}-1; i++ )); do
   # Split keypair from Deployment
@@ -235,6 +269,9 @@ for (( i=0; i<=${#DEPLOYMENTS[@]}-1; i++ )); do
       rabbitmq)
         fn_rabbitmq  $BOSH_CF_DEPLOYMENT
           ;;
+      redis)
+        fn_redis  $BOSH_CF_DEPLOYMENT
+          ;;
       *)
         error_exit "Deployment Backup Function Not Found"
   esac
@@ -243,7 +280,7 @@ done
 #### Calc Runtime in Minutes & Size in MB
 ENDTIME=$(date +%s)
 RUNTIME=$(($(($ENDTIME-$STARTTIME))/60))
-SIZE=$(du -hm $BACKUP_DIR_PATH | awk '{print$1}')
+SIZE=$(du -hsm $BACKUP_DIR_PATH | awk '{print$1}')
 
 #### Wipe Older BACKUP Folders in given Backup Dir
 find $BACKUP_DIR/* -type d ! -ctime -$BACKUP_KEEP_DAYS -exec rm -rf {} \;
